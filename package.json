@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-devin-bridge",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "在 DSH 中使用 Devin 模型，支持登录、模型筛选和用量查询。",
   "license": "MIT",
   "type": "module",
@@ -10,6 +10,7 @@
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
+    "README.en.md",
     "LICENSE",
     "icon.svg"
   ],
