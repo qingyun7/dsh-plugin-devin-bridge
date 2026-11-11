@@ -4,7 +4,7 @@
 
 A [dsh](https://github.com/deepseek-ai/deepseek-harness) LLM adapter plugin that bridges [Devin](https://devin.ai)'s Connect RPC API into the dsh model provider system, enabling dsh's internal agent loop to use Devin-hosted models (`SWE-2 High`, `GLM-5.3 Max`, and any other model Devin exposes) as backends.
 
-This branch targets **DSH 0.2.2-rc.1** as plugin version `0.3.1`. Host packages are peer dependencies, with tested versions pinned for development.
+This branch targets **DSH 0.2.2-rc.1** as plugin version `0.3.2`. Host packages are peer dependencies, with tested versions pinned for development.
 
 Open **Settings → Devin Bridge** to sign in through your browser, sign out of the local Devin CLI, read daily and weekly usage limits, and choose which models appear in the chat picker.
 
