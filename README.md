@@ -2,7 +2,11 @@
 
 [English](README.md) | [中文](README.zh.md)
 
-A [dsh](https://github.com/deepseek-ai/deepseek-harness) LLM adapter plugin that bridges [Devin](https://devin.ai)'s Connect RPC API into the dsh model provider system, enabling dsh's internal agent loop to use Devin-hosted models (`glm-5.2`, `swe-1.7`, and any other model Devin exposes) as backends.
+A [dsh](https://github.com/deepseek-ai/deepseek-harness) LLM adapter plugin that bridges [Devin](https://devin.ai)'s Connect RPC API into the dsh model provider system, enabling dsh's internal agent loop to use Devin-hosted models (`SWE-2 High`, `GLM-5.3 Max`, and any other model Devin exposes) as backends.
+
+This branch targets **DSH 0.2.2-rc.1** as plugin version `0.3.0`. Host packages are peer dependencies, with tested versions pinned for development.
+
+Open **Settings → Devin Bridge** to sign in through your browser, sign out of the local Devin CLI, read daily and weekly usage limits, and choose which models appear in the chat picker.
 
 ## How it works
 
@@ -14,9 +18,7 @@ The plugin registers a `devin` provider route on `ctx.llm` via the dsh LLM seam 
 
 ## Installation
 
-```bash
-pnpm add https://github.com/Arborsm/dsh-plugin-devin-bridge.git
-```
+Download the archive from [GitHub Releases](https://github.com/qingyun7/dsh-plugin-devin-bridge/releases) and paste its HTTPS download URL or local absolute path into **Plugins → Install third-party plugin → Package name or URL**. Browser sign-in requires Devin Desktop or a Devin CLI with ACP browser authentication. Signing out removes the current user’s local CLI credential. Tools that share it will require sign-in again. The usage panel shows the windows reported by Devin.
 
 ## Token resolution
 
@@ -29,7 +31,7 @@ The adapter needs a Devin session token (format: `devin-session-token$<...>`) to
    - macOS/Linux: `~/.local/share/devin/credentials.toml` (or `$XDG_DATA_HOME/devin/credentials.toml`)
    - Override path with `DEVIN_CREDENTIALS_PATH` environment variable
 
-If no token is found, the plugin throws at startup with a actionable error message.
+If no credential is found, open the Devin Bridge settings and sign in.
 
 ## Configuration
 
@@ -45,14 +47,14 @@ All fields are optional — the plugin works out of the box once a token is avai
     forceHttp1: true  # optional: force HTTP/1.1 (default true)
     defaultContextWindow: 128000  # optional: fallback context window
     defaultMaxTokens: 16384  # optional: fallback max output tokens
-    models:  # optional; defaults to glm-5-2 and swe-1-7
-      - id: "glm-5-2"
-        name: "GLM-5.2"
+    models:  # optional; defaults to SWE-2 High and GLM-5.3 Max
+      - id: "glm-5-3-max"
+        name: "GLM-5.3 Max"
         contextWindow: 128000
         maxTokens: 16384
         supportsImages: false
-      - id: "swe-1-7"
-        name: "SWE-1.7"
+      - id: "swe-2-high"
+        name: "SWE-2 High"
         contextWindow: 128000
         maxTokens: 16384
         supportsImages: true
@@ -65,7 +67,7 @@ All fields are optional — the plugin works out of the box once a token is avai
         jitterRatio: 0.1
 ```
 
-When the dsh settings service is available, all of the above can be adjusted at runtime through the settings panel — changes take effect immediately (`live` applies). The `token` field is marked `role('secret')` so it is automatically redacted in settings descriptors returned to wire surfaces.
+SettingsForms generates a form for these fields. The complete Config schema is volatile, so saved changes update the running instance and refresh provider registrations and retry policy. The `token` field is marked `role('secret')` so it is automatically redacted in settings descriptors returned to wire surfaces.
 
 ## Usage
 
@@ -73,7 +75,7 @@ Once configured, dsh's model selector will show `Devin` as a provider with avail
 
 ## Features
 
-- **Dynamic model catalog**: Fetches the live model list from Devin via `GetCascadeModelConfigs` RPC (5-minute TTL cache), merging user-configured models as fallback. Network failures gracefully fall back to the static config.
+- **Dynamic model catalog**: The host discovery API fetches available models via `GetCascadeModelConfigs`. The chat picker shows the models selected and saved in Settings → Devin Bridge.
 - **Text streaming**: Full text delta streaming with block assembly
 - **Reasoning/thinking**: Reasoning content mapped to dsh's `reasoning` block type
 - **Tool calls**: Devin tool-call deltas translated to dsh's `tool-call` blocks
@@ -102,3 +104,5 @@ src/
 ## License
 
 MIT
+
+Based on [Arborsm/dsh-plugin-devin-bridge](https://github.com/Arborsm/dsh-plugin-devin-bridge), under the MIT license.

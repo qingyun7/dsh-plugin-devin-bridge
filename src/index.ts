@@ -1,6 +1,6 @@
 // dsh-plugin-devin-bridge 入口。
 // 注册 DevinAdapter 为 dsh LLM 的 `devin` provider route，
-// 让 dsh 内部的 agent loop 能使用 Devin 的 glm-5.2 / swe-1.7 模型。
+// 让 dsh 内部的 agent loop 能使用 Devin 的托管模型。
 //
 // Token 解析优先级：
 //   1. settings 面板用户配置（token 字段）
@@ -11,7 +11,8 @@
 // 当 settings 服务存在时，所有连接事实（token / baseUrl / proxy / retryPolicy 等）
 // 通过 settings 面板动态可调，变更即时生效（`live` applies）。
 
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import z from '@deepseek-ai/schemastery'
 import {
   resolveRetryPolicy,
@@ -19,41 +20,25 @@ import {
   type RetryPolicyConfig,
   type ResolvedRetryPolicy,
 } from '@deepseek-ai/dsh-llm'
-import { installSettingsSection, settingsNamespace, type SettingsSectionHooks } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 import type { ImageAttachmentRef, StoredImageAttachment } from '@deepseek-ai/dsh-attachment'
 import { DevinAdapter, type DevinCatalogModel } from './adapter/devin.ts'
 import { readDevinSession, DEFAULT_API_SERVER_URL } from './adapter/credentials.ts'
+import { createDevinAccount } from './account.ts'
+import { registerSettingsRoutes, type BridgeStatus } from './settings-rpc.ts'
 
 export const name = 'dsh-plugin-devin-bridge'
-export const inject = ['llm']
+export const inject = ['llm', 'settings']
 
 const PROVIDER = 'devin'
-const SETTINGS_NS = settingsNamespace(name)
 
 // ─── 默认模型 ───────────────────────────────────────────────────────────────
 
 const DEFAULT_MODELS: DevinCatalogModel[] = [
-  {
-    id: 'glm-5-2',
-    name: 'GLM-5.2',
-    description: 'Devin-hosted GLM-5.2 reasoning model. Effort (high/medium/max/none) selectable via dsh reasoning slider.',
-    contextWindow: 200_000,
-    maxTokens: 200_000,
-    supportsImages: false,
-    family: 'GLM-5.2',
-    isPromo: true,
-    creditMultiplier: 1.5,
-  },
-  {
-    id: 'swe-1-7',
-    name: 'SWE-1.7',
-    description: 'Devin-hosted SWE-1.7 coding model (Kimi K2.7 Code base). Effort (high/medium/max/none) selectable via dsh reasoning slider.',
-    contextWindow: 262_000,
-    maxTokens: 262_000,
-    supportsImages: true,
-    family: 'SWE-1.7',
-    creditMultiplier: 9,
-  },
+  { id: 'swe-2-high', name: 'SWE-2 High', family: 'SWE-2',
+    contextWindow: 262_000, maxTokens: 16_384, supportsImages: true },
+  { id: 'glm-5-3-max', name: 'GLM-5.3 Max', family: 'GLM-5.3',
+    contextWindow: 1_048_576, maxTokens: 16_384, supportsImages: false },
 ]
 
 // ─── 配置 schema ────────────────────────────────────────────────────────────
@@ -93,7 +78,7 @@ const catalogModel: z<DevinCatalogModel> = z.object({
   creditMultiplier: z.number().step(0.01),
 })
 
-export const Config: z<Config> = z.object({
+export const Config = z.object({
   token: z.string().role('secret').default(''),
   baseUrl: z.string().default('https://server.codeium.com'),
   proxy: z.string().default(''),
@@ -102,7 +87,7 @@ export const Config: z<Config> = z.object({
   defaultMaxTokens: z.number().step(1).min(1).default(16_384),
   models: z.array(catalogModel).default(DEFAULT_MODELS),
   retryPolicy: RetryPolicySchema,
-})
+}).volatile()
 
 // ─── Token 解析 ─────────────────────────────────────────────────────────────
 
@@ -113,7 +98,7 @@ interface ResolvedConnection {
 
 // ─── 插件入口 ───────────────────────────────────────────────────────────────
 
-export function apply(ctx: Context, config: Config): void {
+export function apply(ctx: Context, config: Volatile<Config>): void {
   // attachment store（用于读取图片）— 在插件加载时获取一次
   const attachments = ctx.get('attachments')
   const readImage: ((ref: ImageAttachmentRef, signal?: AbortSignal) => Promise<StoredImageAttachment>) | undefined =
@@ -121,30 +106,20 @@ export function apply(ctx: Context, config: Config): void {
       ? (ref, signal) => attachments.readImage(ref, signal)
       : undefined
 
-  // 当前权威配置源 — settings 服务存在时指向 resolved scope，否则指向 entry config
-  let current: Config = config
-  const source: () => Config = () => current
+  // 新版设置页由 Config 自动生成，命名空间必须是当前 profile entry id。
+  const settingsNs = ctx.fiber.entry?.options.id
+  if (!settingsNs) throw new Error('devin-bridge: DSH settings entry is unavailable')
+  ctx.effect(() => ctx.settings.configure({ auto: true }))
+  const source = () => ((ctx.fiber.effectiveConfig ?? config) as Volatile<Config>).get()
 
-  // 缓存 token 解析结果：credentials.toml 只在配置变更时读一次，避免每请求读文件
-  let cachedConn: ResolvedConnection | null = null
-  let cachedConnKey = ''
   const resolveConn = (): ResolvedConnection => {
     const c = source()
-    // token 非空时直接用，不缓存（settings 可能动态改 token）
     if (c.token) return { token: c.token, baseUrl: c.baseUrl }
-    // token 为空时从 credentials.toml 读取，按 baseUrl 缓存
-    const key = c.baseUrl
-    if (cachedConn !== null && cachedConnKey === key) return cachedConn
     const session = readDevinSession()
     if (session) {
-      const baseUrl = c.baseUrl === DEFAULT_API_SERVER_URL
-        ? session.apiServerUrl
-        : c.baseUrl
-      cachedConn = { token: session.apiKey, baseUrl }
-      cachedConnKey = key
-      return cachedConn
+      const baseUrl = c.baseUrl === DEFAULT_API_SERVER_URL ? session.apiServerUrl : c.baseUrl
+      return { token: session.apiKey, baseUrl }
     }
-    // 每次都抛 — 不缓存错误，让用户配置 token 后立即生效
     const hint = process.platform === 'win32'
       ? '%APPDATA%\\devin\\credentials.toml'
       : '~/.local/share/devin/credentials.toml'
@@ -183,7 +158,7 @@ export function apply(ctx: Context, config: Config): void {
   const register = (): void => {
     // 解析当前 retryPolicy — 注册时捕获，变更需重新注册
     const retryPolicy: ResolvedRetryPolicy = resolveRetryPolicy(
-      source().retryPolicy,
+      structuredClone(source().retryPolicy) as RetryPolicyConfig,
       `llm: provider "${PROVIDER}" retryPolicy`,
     )
     // 覆盖 adapter 的 providerRetryPolicy，让注册时捕获最新策略
@@ -193,15 +168,15 @@ export function apply(ctx: Context, config: Config): void {
 
     if (!directoryHandle) {
       directoryHandle = ctx.llm.registerConfigurableProviders([
-        { provider: PROVIDER, displayName: 'Devin', settingsNs: SETTINGS_NS, settingsPath: [] },
+        { provider: PROVIDER, displayName: 'Devin', settingsNs, settingsPath: [] },
       ])
     }
     if (!adapterHandle) {
       adapterHandle = ctx.llm.registerAdapter([PROVIDER], adapter) as never
     }
     if (!discoveryHandle) {
-      discoveryHandle = ctx.llm.registerModelDiscovery(SETTINGS_NS, (request) =>
-        adapter.discoverModels(request.signal),
+      discoveryHandle = ctx.llm.registerModelDiscovery(settingsNs, (_request, signal) =>
+        adapter.discoverModels(signal),
       )
     }
   }
@@ -221,25 +196,70 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
 
-  // settings 面板接入：settings 服务存在时，配置通过面板动态可调
-  const hooks: SettingsSectionHooks<Config> = {
-    setSource(thunk: () => Config): void {
-      current = thunk()
-    },
-    onChange(): void {
-      // 重新注册以捕获最新的 retryPolicy
-      unregister()
-      register()
-    },
+  const refreshRoutes = () => {
+    unregister()
+    register()
   }
 
-  installSettingsSection(ctx, SETTINGS_NS, Config, config, hooks)
-
-  // 即使没有 settings 服务，也要注册一次（fallback 到 entry config）
+  // SettingsForms persists the chosen catalog through the normal profile layer.
+  ctx.on('loader/volatile-update', refreshRoutes)
+  ctx.effect(() => () => unregister())
   register()
 
-  // 插件卸载时清理
-  ctx.effect(() => () => unregister())
+  const account = createDevinAccount({ onCredentialsChanged: refreshRoutes })
+  ctx.effect(() => () => account.dispose())
+  let catalog: readonly DevinCatalogModel[] = []
+  let catalogAccount: string | undefined
+  const currentCredential = () => source().token || readDevinSession()?.apiKey
+  const desktop = () => (ctx.get('profileContext') as { name?: string } | undefined)?.name === 'desktop'
+  const status = (): BridgeStatus => ({
+    account: account.status(),
+    desktop: desktop(),
+    configuredToken: Boolean(source().token),
+    models: source().models,
+  })
+  ctx.inject(['connection'], (scope) => scope.effect(() => registerSettingsRoutes(
+    scope.get('connection') as Parameters<typeof registerSettingsRoutes>[0],
+    async (endpoint, payload, signal) => {
+      if (endpoint === 'status') return status()
+      if (endpoint === 'usage') return adapter.fetchUsage(AbortSignal.any([signal, AbortSignal.timeout(15_000)]))
+      if (endpoint === 'catalog') {
+        const credential = currentCredential()
+        const models = await adapter.fetchModelCatalog(AbortSignal.any([signal, AbortSignal.timeout(20_000)]))
+        if (credential !== currentCredential()) throw new Error('Account changed')
+        catalog = models
+        catalogAccount = credential
+        return models
+      }
+      if (endpoint === 'save') {
+        if (!Array.isArray(payload) || payload.length > 300 || !payload.every(id => typeof id === 'string')) {
+          throw new Error('Invalid model selection')
+        }
+        const available = new Map(source().models.map(model => [model.id, model]))
+        if (catalogAccount === currentCredential()) {
+          for (const model of catalog) available.set(model.id, model)
+        }
+        const models = [...new Set<string>(payload)].map(id => available.get(id))
+        if (models.some(model => !model)) throw new Error('Refresh the catalog first')
+        await ctx.settings.update(settingsNs, { models })
+        return status()
+      }
+      if (!desktop()) throw new Error('Account controls require DSH Desktop')
+      if (endpoint === 'login') account.login()
+      if (endpoint === 'cancel') await account.cancelLogin()
+      if (endpoint === 'logout') {
+        if (account.status().authenticated) {
+          const next = await account.logout()
+          if (next.authenticated || next.error) return status()
+        }
+        if (source().token) await ctx.settings.update(settingsNs, { token: '' })
+        catalog = []
+        catalogAccount = undefined
+      }
+      return status()
+    },
+  )))
+
 }
 
 export { DevinAdapter } from './adapter/devin.ts'

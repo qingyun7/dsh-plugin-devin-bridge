@@ -1,0 +1,43 @@
+// Read-only subset of the Devin account status protocol used by the settings UI.
+syntax = "proto3";
+package exa.seat_management_pb;
+
+import "devin.proto";
+
+message GetUserStatusRequest {
+  exa.api_server_pb.ExaCodeiumCommonPb_Metadata metadata = 1;
+}
+
+message GetUserStatusResponse {
+  UserStatus user_status = 1;
+  PlanInfo plan_info = 2;
+}
+
+message UserStatus {
+  PlanStatus plan_status = 13;
+}
+
+message PlanStatus {
+  PlanInfo plan_info = 1;
+  int32 daily_quota_remaining_percent = 14;
+  int32 weekly_quota_remaining_percent = 15;
+  int64 daily_quota_reset_at_unix = 17;
+  int64 weekly_quota_reset_at_unix = 18;
+}
+
+enum BillingStrategy {
+  BILLING_STRATEGY_UNSPECIFIED = 0;
+  BILLING_STRATEGY_CREDITS = 1;
+  BILLING_STRATEGY_QUOTA = 2;
+  BILLING_STRATEGY_ACU = 3;
+}
+
+message PlanInfo {
+  BillingStrategy billing_strategy = 35;
+  bool hide_daily_quota = 36;
+  bool hide_weekly_quota = 37;
+}
+
+service SeatManagementService {
+  rpc GetUserStatus(GetUserStatusRequest) returns (GetUserStatusResponse);
+}

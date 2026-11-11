@@ -6,16 +6,16 @@ import {
   ExaCodeiumCommonPb_StopReason,
 } from '../proto/gen/devin_pb.ts'
 import type {
-  CallId,
+  ToolCallId,
   ContentBlock,
   FinishReason,
   StreamChunk,
   TokenUsage,
 } from '@deepseek-ai/dsh-llm'
-import { CallId as CallIdFn, LlmError } from '@deepseek-ai/dsh-llm'
+import { ToolCallId as ToolCallIdFn, LlmError } from '@deepseek-ai/dsh-llm'
 
 interface ToolState {
-  callId: CallId
+  callId: ToolCallId
   name: string
   arguments: string
   blockIndex: number
@@ -92,7 +92,7 @@ export class DevinStreamDecoder {
       let state = this.findTool(delta.id)
       if (!state) {
         state = {
-          callId: CallIdFn(delta.id || `call_${this.tools.length}`),
+          callId: ToolCallIdFn(delta.id || `call_${this.tools.length}`),
           name: delta.name || '',
           arguments: '',
           blockIndex: this.nextIndex++,
@@ -101,7 +101,7 @@ export class DevinStreamDecoder {
         }
         this.tools.push(state)
       }
-      if (delta.id) state.callId = CallIdFn(delta.id)
+      if (delta.id) state.callId = ToolCallIdFn(delta.id)
       if (delta.name) state.name = delta.name
 
       if (!state.started) {

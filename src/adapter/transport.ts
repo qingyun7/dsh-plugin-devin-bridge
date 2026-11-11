@@ -4,6 +4,8 @@
 import type { Interceptor } from '@connectrpc/connect'
 import { createConnectTransport } from '@connectrpc/connect-node'
 import type { Agent } from 'node:http'
+import { HttpsProxyAgent } from 'https-proxy-agent'
+import { SocksProxyAgent } from 'socks-proxy-agent'
 
 export interface TransportConfig {
   baseUrl: string
@@ -55,13 +57,10 @@ function createProxyAgent(proxyUrl: string | undefined, baseUrl: string): Agent 
   const protocol = url.protocol
 
   if (protocol === 'http:' || protocol === 'https:') {
-    // 动态导入避免无代理场景的额外加载
-    const { HttpsProxyAgent } = require('https-proxy-agent') as typeof import('https-proxy-agent')
     return new HttpsProxyAgent(proxyUrl) as unknown as Agent
   }
 
   if (protocol === 'socks5:' || protocol === 'socks5h:') {
-    const { SocksProxyAgent } = require('socks-proxy-agent') as typeof import('socks-proxy-agent')
     return new SocksProxyAgent(proxyUrl) as unknown as Agent
   }
 

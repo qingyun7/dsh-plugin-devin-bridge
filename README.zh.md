@@ -2,7 +2,11 @@
 
 [English](README.md) | [中文](README.zh.md)
 
-一个 [dsh](https://github.com/deepseek-ai/deepseek-harness) LLM 适配器插件，将 [Devin](https://devin.ai) 的 Connect RPC API 桥接到 dsh 模型提供者系统，让 dsh 内部的 agent loop 能够使用 Devin 托管的模型（`glm-5.2`、`swe-1.7` 及 Devin 暴露的其他模型）作为后端。
+一个 [dsh](https://github.com/deepseek-ai/deepseek-harness) LLM 适配器插件，将 [Devin](https://devin.ai) 的 Connect RPC API 桥接到 dsh 模型提供者系统，让 dsh 内部的 agent loop 能够使用 Devin 托管的模型（`SWE-2 High`、`GLM-5.3 Max` 及 Devin 暴露的其他模型）作为后端。
+
+此分支已移植到 **DSH 0.2.2-rc.1**，插件版本为 `0.3.0`。宿主包只作为 peer 依赖，开发依赖固定使用已验证的版本。
+
+打开 **设置 → Devin 桥**，可以在浏览器登录、退出本机 Devin CLI 授权、刷新日／周用量、拉取当前账号的模型并勾选要显示在聊天框里的选项。
 
 ## 工作原理
 
@@ -14,9 +18,7 @@
 
 ## 安装
 
-```bash
-pnpm add https://github.com/Arborsm/dsh-plugin-devin-bridge.git
-```
+从 [GitHub Releases](https://github.com/qingyun7/dsh-plugin-devin-bridge/releases) 下载安装包，在 DSH 的「插件 → 安装第三方插件」中把安装包的 HTTPS 下载地址或本机绝对路径填入「包名或地址」，安装后启用。登录功能需要本机安装支持 ACP 浏览器登录的 Devin CLI 或 Devin 桌面版。退出会移除当前用户的本机 CLI 凭据，使用同一凭据的工具也需重新登录。用量仅展示 Devin 返回的窗口数据。
 
 ## Token 解析
 
@@ -29,7 +31,7 @@ pnpm add https://github.com/Arborsm/dsh-plugin-devin-bridge.git
    - macOS/Linux：`~/.local/share/devin/credentials.toml`（或 `$XDG_DATA_HOME/devin/credentials.toml`）
    - 通过 `DEVIN_CREDENTIALS_PATH` 环境变量覆盖路径
 
-如果都没找到，插件在启动时抛出带有明确指引的错误。
+如果都没找到，插件会在需要访问 Devin 时给出明确指引；你仍可先打开设置页填写 token。
 
 ## 配置
 
@@ -45,14 +47,14 @@ pnpm add https://github.com/Arborsm/dsh-plugin-devin-bridge.git
     forceHttp1: true  # 可选：强制 HTTP/1.1（默认 true）
     defaultContextWindow: 128000  # 可选：默认上下文窗口
     defaultMaxTokens: 16384  # 可选：默认最大输出 token
-    models:  # 可选；默认包含 glm-5-2 和 swe-1-7
-      - id: "glm-5-2"
-        name: "GLM-5.2"
+    models:  # 可选；默认包含 SWE-2 High 和 GLM-5.3 Max
+      - id: "glm-5-3-max"
+        name: "GLM-5.3 Max"
         contextWindow: 128000
         maxTokens: 16384
         supportsImages: false
-      - id: "swe-1-7"
-        name: "SWE-1.7"
+      - id: "swe-2-high"
+        name: "SWE-2 High"
         contextWindow: 128000
         maxTokens: 16384
         supportsImages: true
@@ -65,7 +67,7 @@ pnpm add https://github.com/Arborsm/dsh-plugin-devin-bridge.git
         jitterRatio: 0.1
 ```
 
-当 dsh settings 服务可用时，以上所有字段都可以通过设置面板在运行时动态调整——变更即时生效（`live` applies）。`token` 字段标记为 `role('secret')`，在返回给 wire surface 的 settings descriptor 中自动脱敏。
+以上字段由新版 SettingsForms 自动生成表单。Config 整体声明为 volatile，保存后实时更新，并重新注册模型目录及重试策略。`token` 字段标记为 `role('secret')`，在返回给 wire surface 的 settings descriptor 中自动脱敏。
 
 ## 使用方式
 
@@ -73,7 +75,7 @@ pnpm add https://github.com/Arborsm/dsh-plugin-devin-bridge.git
 
 ## 功能特性
 
-- **动态模型目录**：通过 `GetCascadeModelConfigs` RPC 从 Devin 服务器实时拉取可用模型列表（5 分钟 TTL 缓存），与用户配置的静态模型合并。网络失败时优雅降级到静态配置。
+- **动态模型目录**：宿主模型发现接口通过 `GetCascadeModelConfigs` RPC 拉取可用模型。模型选择器显示在「设置 → Devin 桥」勾选并保存的模型。
 - **文本流式输出**：完整的文本增量流式传输与 block 组装
 - **推理/思考**：推理内容映射到 dsh 的 `reasoning` block 类型
 - **工具调用**：Devin 工具调用增量翻译为 dsh 的 `tool-call` block
@@ -102,3 +104,5 @@ src/
 ## 许可证
 
 MIT
+
+上游项目为 [Arborsm/dsh-plugin-devin-bridge](https://github.com/Arborsm/dsh-plugin-devin-bridge)，保留 MIT 许可。

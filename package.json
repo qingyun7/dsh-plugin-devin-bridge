@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-devin-bridge",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "dsh LLM adapter plugin that bridges Devin Connect RPC into the dsh model provider system, with dynamic model catalog, settings panel integration, and Devin CLI credential auto-detection.",
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,7 @@
   ],
   "engines": {
     "node": "^22.19 || >=24",
-    "dsh": ">=0.1.0-rc.6"
+    "dsh": ">=0.2.2-rc.1 <0.3.0"
   },
   "dsh": {
     "bundle": {
@@ -22,7 +22,8 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-runtime"
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-settings"
       ],
       "platform": "web"
     }
@@ -30,75 +31,57 @@
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit",
-    "check": "pnpm run typecheck && pnpm run build",
+    "check": "pnpm run typecheck && pnpm run build && pnpm test",
     "prepare": "pnpm run build",
-    "proto:gen": "protoc -I src/proto --es_out=src/proto/gen --es_opt=target=ts src/proto/devin.proto"
+    "proto:gen": "protoc -I src/proto --es_out=src/proto/gen --es_opt=target=ts,import_extension=ts src/proto/devin.proto src/proto/seat.proto",
+    "test": "node --test test/*.test.mjs"
   },
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
     "devin",
     "llm-adapter",
-    "glm-5.2",
-    "swe-1.7",
     "connect-rpc"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Arborsm/dsh-plugin-devin-bridge.git"
+    "url": "git+https://github.com/qingyun7/dsh-plugin-devin-bridge.git"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.14.0",
     "@connectrpc/connect": "^2.1.2",
     "@connectrpc/connect-node": "^2.1.2",
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-attachment": "0.1.0-rc.7",
-    "@deepseek-ai/dsh-brand": "0.1.0-rc.7",
-    "@deepseek-ai/dsh-invariants": "0.1.0-rc.7",
-    "@deepseek-ai/dsh-llm": "0.1.0-rc.7",
-    "@deepseek-ai/dsh-settings": "0.1.0-rc.7",
-    "@deepseek-ai/dsh-timeout": "0.1.0-rc.7",
-    "@deepseek-ai/schemastery": "^3.18.1",
     "https-proxy-agent": "^9.1.0",
     "socks-proxy-agent": "^10.1.0"
   },
   "devDependencies": {
     "@bufbuild/protoc-gen-es": "^2.14.0",
-    "@deepseek-ai/dsh-client-connection": "0.1.0-rc.7",
-    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.7",
-    "@deepseek-ai/dsh-client-ui-settings": "0.1.0-rc.7",
-    "@deepseek-ai/dsh-client-ui-settings-plugins": "0.1.0-rc.7",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.7",
-    "@deepseek-ai/dsh-host-apiproxy": "0.1.0-rc.7",
     "@types/node": "^22.20.0",
-    "@types/react": "~18.3.1",
-    "react": "^18.2.0",
     "tsdown": "^0.22.14",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/schemastery": "3.19.0",
+    "@deepseek-ai/dsh-attachment": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-settings": "0.2.2-rc.1",
+    "@deepseek-ai/cordis-plugin-loader": "1.1.0",
+    "@types/react": "^18.3.0"
   },
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
-    "./client": "./lib/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./client": "./lib/client.js"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-client-runtime": "0.1.0-rc.7",
-    "@deepseek-ai/dsh-client-ui-slots": "0.1.0-rc.7",
-    "react": "^18.2.0"
-  },
-  "peerDependenciesMeta": {
-    "@deepseek-ai/dsh-client-runtime": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-client-ui-slots": {
-      "optional": true
-    },
-    "react": {
-      "optional": true
-    }
+    "@deepseek-ai/cordis": "^4.1.0",
+    "@deepseek-ai/schemastery": "^3.19.0",
+    "@deepseek-ai/dsh-attachment": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-settings": "^0.2.2-rc.1",
+    "@deepseek-ai/cordis-plugin-loader": "~1.1.0"
   }
 }

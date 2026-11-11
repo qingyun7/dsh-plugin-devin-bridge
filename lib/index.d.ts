@@ -1,6 +1,6 @@
 import z from "@deepseek-ai/schemastery";
 import { GenerateOptions, LlmAdapter, LlmDiscoveredModel, LlmModelInfo, LlmProviderInfo, LlmResolvedModelInfo, RetryPolicyConfig, StreamChunk } from "@deepseek-ai/dsh-llm";
-import { Context } from "@deepseek-ai/cordis";
+import { Context, Volatile } from "@deepseek-ai/cordis";
 import { ImageAttachmentRef, StoredImageAttachment } from "@deepseek-ai/dsh-attachment";
 //#region src/adapter/devin.d.ts
 interface DevinCatalogModel {
@@ -18,6 +18,10 @@ interface DevinCatalogModel {
   isPromo?: boolean;
   /** 信用倍率，用于排序和展示。 */
   creditMultiplier?: number;
+  /** Devin 标为该系列的默认变体。 */
+  isDefault?: boolean;
+  isRecommended?: boolean;
+  isNew?: boolean;
 }
 interface DevinConnectionOptions {
   baseUrl: string;
@@ -34,37 +38,37 @@ interface DevinAdapterOptions {
   /** 当前连接配置；每次操作时调用以获取最新值。 */
   options: () => DevinConnectionOptions;
 }
+interface DevinUsageWindow {
+  remainingPercent: number;
+  resetAt: string;
+}
+interface DevinUsage {
+  daily?: DevinUsageWindow;
+  weekly?: DevinUsageWindow;
+}
 declare class DevinAdapter extends LlmAdapter {
   private readonly config;
-  private cachedClient;
+  private cachedClients;
   private cachedClientKey;
   constructor(options: DevinAdapterOptions);
   /** 当前连接配置（每次调用读取最新值）。 */
   private conn;
-  /** 获取或重建 Connect client（baseUrl/token/proxy 变更时自动重建）。 */
+  /** 根据同一套连接参数创建聊天和账号客户端。 */
+  private clients;
   private client;
+  private seatClient;
   providerInfo(_provider: string): LlmProviderInfo;
   listModels(_provider: string): Promise<readonly LlmModelInfo[]>;
   resolveModel(_provider: string, model: string, _signal?: AbortSignal): Promise<LlmResolvedModelInfo>;
-  /**
-   * 从 Devin 服务器拉取可用模型列表，供 settings 面板的
-   * "Fetch available models" 按钮调用。
-   *
-   * 同 family 的多个 effort 变体合并为一个基础模型（取 family default），
-   * effort 走 dsh 的 reasoning effort 滑块控制，插件内部映射到实际 model_uid。
-   * 如 GLM-5.2 family → 只返回 glm-5-2，用户调 effort=high/medium/max/none
-   * 时插件映射到 glm-5-2 / glm-5-2-medium(无) / glm-5-2-max / glm-5-2-none。
-   */
+  /** 将当前可用模型投影为 DSH 的模型发现格式。 */
   discoverModels(signal?: AbortSignal): Promise<LlmDiscoveredModel[]>;
   /**
-   * 调用 GetCascadeModelConfigs RPC 从 Devin 服务器拉取可用模型目录。
-   * 过滤掉 disabled 的模型，提取 uid / label / supports_images / max_tokens /
-   * description / family / effort / isPremium / isPromo / creditMultiplier。
-   *
-   * Devin 的 model_uid 已包含 effort（如 glm-5-2 = High, glm-5-2-max = Max,
-   * swe-1-7-medium = Medium），不需要单独的 reasoning effort API。
+   * 读取当前账号的目录。每个系列保留一个可选变体及其真实模型 ID，
+   * 优先选择 Devin 指定的默认或推荐变体。
    */
-  private fetchModelCatalog;
+  fetchModelCatalog(signal?: AbortSignal): Promise<DevinCatalogModel[]>;
+  /** 返回该账号可见的额度窗口。没有日／周额度的计划返回空对象。 */
+  fetchUsage(signal?: AbortSignal): Promise<DevinUsage>;
   stream(options: GenerateOptions): AsyncIterable<StreamChunk>;
   private buildRequest;
   private convertMessage;
@@ -117,8 +121,26 @@ interface Config {
   /** 重试策略。 */
   retryPolicy: RetryPolicyConfig;
 }
-declare const Config: z<Config>;
-declare function apply(ctx: Context, config: Config): void;
+declare const Config: z<NoInfer<Schemastery.ObjectS<NoInfer<{
+  token: z<string, string, "defined">;
+  baseUrl: z<string, string, "defined">;
+  proxy: z<string, string, "defined">;
+  forceHttp1: z<boolean, boolean, "defined">;
+  defaultContextWindow: z<number, number, "defined">;
+  defaultMaxTokens: z<number, number, "defined">;
+  models: z<DevinCatalogModel[], DevinCatalogModel[], "defined">;
+  retryPolicy: z<RetryPolicyConfig>;
+}>>>, NoInfer<Schemastery.ObjectT<NoInfer<{
+  token: z<string, string, "defined">;
+  baseUrl: z<string, string, "defined">;
+  proxy: z<string, string, "defined">;
+  forceHttp1: z<boolean, boolean, "defined">;
+  defaultContextWindow: z<number, number, "defined">;
+  defaultMaxTokens: z<number, number, "defined">;
+  models: z<DevinCatalogModel[], DevinCatalogModel[], "defined">;
+  retryPolicy: z<RetryPolicyConfig>;
+}>>>, "volatile">;
+declare function apply(ctx: Context, config: Volatile<Config>): void;
 //#endregion
 export { Config, DevinAdapter, type DevinAdapterOptions, type DevinCatalogModel, type DevinConnectionOptions, type DevinSession, apply, devinCredentialsPath, inject, name, readDevinSession };
 //# sourceMappingURL=index.d.ts.map
