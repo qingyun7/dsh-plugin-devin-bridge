@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-devin-bridge",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "dsh LLM adapter plugin that bridges Devin Connect RPC into the dsh model provider system, with dynamic model catalog, settings panel integration, and Devin CLI credential auto-detection.",
   "license": "MIT",
   "type": "module",
@@ -10,7 +10,8 @@
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
-    "LICENSE"
+    "LICENSE",
+    "icon.svg"
   ],
   "engines": {
     "node": "^22.19 || >=24",
@@ -83,5 +84,6 @@
     "@deepseek-ai/dsh-llm": "^0.2.2-rc.1",
     "@deepseek-ai/dsh-settings": "^0.2.2-rc.1",
     "@deepseek-ai/cordis-plugin-loader": "~1.1.0"
-  }
+  },
+  "icon": "./icon.svg"
 }

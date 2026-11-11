@@ -4,7 +4,7 @@
 
 一个 [dsh](https://github.com/deepseek-ai/deepseek-harness) LLM 适配器插件，将 [Devin](https://devin.ai) 的 Connect RPC API 桥接到 dsh 模型提供者系统，让 dsh 内部的 agent loop 能够使用 Devin 托管的模型（`SWE-2 High`、`GLM-5.3 Max` 及 Devin 暴露的其他模型）作为后端。
 
-此分支已移植到 **DSH 0.2.2-rc.1**，插件版本为 `0.3.0`。宿主包只作为 peer 依赖，开发依赖固定使用已验证的版本。
+此分支已移植到 **DSH 0.2.2-rc.1**，插件版本为 `0.3.1`。宿主包只作为 peer 依赖，开发依赖固定使用已验证的版本。
 
 打开 **设置 → Devin 桥**，可以在浏览器登录、退出本机 Devin CLI 授权、刷新日／周用量、拉取当前账号的模型并勾选要显示在聊天框里的选项。
 
