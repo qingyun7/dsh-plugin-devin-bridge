@@ -36,6 +36,8 @@ export class DevinStreamDecoder {
   private stopReason: ExaCodeiumCommonPb_StopReason = ExaCodeiumCommonPb_StopReason.ExaCodeiumCommonPb_StopReason_STOP_REASON_UNSPECIFIED
   private finished = false
 
+  constructor(private readonly includeReasoning = true) {}
+
   decode(response: GetChatMessageResponse): StreamChunk[] {
     const chunks: StreamChunk[] = []
     if (!response || this.finished) return chunks
@@ -51,7 +53,7 @@ export class DevinStreamDecoder {
       this.currentUsage = u
     }
 
-    if (response.deltaThinking || response.deltaSignature || response.thinkingRedacted) {
+    if (this.includeReasoning && (response.deltaThinking || response.deltaSignature || response.thinkingRedacted)) {
       if (!this.reasoningStarted) {
         this.reasoningIndex = this.nextIndex++
         this.reasoningStarted = true
@@ -145,7 +147,7 @@ export class DevinStreamDecoder {
           kind: 'error',
           failure: {
             message: upstreamError.message || String(upstreamError),
-            code: 'TRANSPORT',
+            code: connectErrorCode(upstreamError.message),
           },
         },
       })
@@ -214,9 +216,8 @@ function mapFinishReason(reason: ExaCodeiumCommonPb_StopReason): FinishReason {
 }
 
 export function connectErrorCode(message: string): string {
-  const colonIdx = message.indexOf(':')
-  if (colonIdx >= 0) {
-    const code = message.slice(0, colonIdx).trim()
+  const code = message.match(/^\[([a-z_]+)\]|^([a-z_]+)\s*:/)?.slice(1).find(Boolean)
+  if (code) {
     const known: Record<string, string> = {
       invalid_argument: 'INVALID_REQUEST',
       failed_precondition: 'INVALID_REQUEST',

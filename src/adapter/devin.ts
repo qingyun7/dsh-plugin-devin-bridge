@@ -360,7 +360,9 @@ export class DevinAdapter extends LlmAdapter {
     }
 
     // 解码响应
-    const decoder = new DevinStreamDecoder()
+    // Auto Review consumes the JSON verdict only. Trailing reasoning frames
+    // would put another block after the verdict and invalidate it.
+    const decoder = new DevinStreamDecoder(options.purpose !== 'auto-review')
     const iterator = serverStream[Symbol.asyncIterator]()
     let upstreamError: Error | null = null
 
@@ -423,7 +425,8 @@ export class DevinAdapter extends LlmAdapter {
         numCompletions: 1n,
         maxTokens: BigInt(options.maxTokens ?? c.defaultMaxTokens),
         maxNewlines: 400n,
-        temperature: options.temperature ?? 1,
+        // DSH Auto Review sends 0, which Devin rejects on the wire.
+        temperature: options.temperature === 0 ? 0.01 : (options.temperature ?? 1),
         topK: 40n,
         topP: 0.95,
       }),

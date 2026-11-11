@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createAssistantMessage, createSystemMessage, createToolResultMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
+import { BlockAssembler, createAssistantMessage, createSystemMessage, createToolResultMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { DevinAdapter } from '../lib/index.js'
 
 function harness(responses = []) {
@@ -62,4 +62,35 @@ test('sends complete current tools without leaking developer tool updates into c
   ], { tools: [{ name: 'new_tool', description: 'Current tool', parameters: { type: 'object', properties: {} } }] })
   assert.deepEqual(request.tools.map((tool) => tool.name), ['new_tool'])
   assert.deepEqual(request.chatMessagePrompts.map((message) => message.prompt), ['Continue'])
+})
+
+test('sends a Devin-compatible temperature for DSH Auto Review', async () => {
+  const messages = [{ role: 'user', content: [{ type: 'text', text: 'Review a local read.' }] }]
+  const { request } = await harness().run(messages, { purpose: 'auto-review', temperature: 0 })
+  assert.equal(request.configuration.temperature, 0.01)
+  const normal = await harness().run(messages, { temperature: 0.5 })
+  assert.equal(normal.request.configuration.temperature, 0.5)
+})
+
+test('reports a rejected streaming request as invalid input', async () => {
+  const broken = {
+    *[Symbol.iterator]() {
+      throw new Error('[invalid_argument] an internal error occurred')
+    },
+  }
+  const { chunks } = await harness(broken).run([])
+  assert.equal(chunks.at(-1).reason.failure.code, 'INVALID_REQUEST')
+})
+
+test('keeps the Auto Review verdict as the final text block even with late thinking metadata', async () => {
+  const verdict = '{"risk":"low","decision":"allow"}'
+  const { chunks } = await harness([
+    response({ deltaThinking: 'Consider the action.' }),
+    response({ deltaText: verdict }),
+    response({ deltaSignature: 'trailing-signature' }),
+  ]).run([], { purpose: 'auto-review', temperature: 0 })
+  const assembler = new BlockAssembler()
+  for (const chunk of chunks) assembler.push(chunk)
+  assert.deepEqual(assembler.blocks(), [{ type: 'text', text: verdict }])
+  assert.equal(chunks.at(-1).reason.kind, 'stop')
 })
